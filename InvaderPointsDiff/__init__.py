@@ -127,7 +127,7 @@ def plop() -> None:
                 potentials = filter_potential_flash(line.get('player'), last_flashes)
                 for potential in potentials:
                     attachments = [{
-                        "title": potential.get('player'),
+                        "title": potential.get('city'),
                         "image_url": 'http://space-invaders.com' + potential.get('img')
                     }]
                     client.chat_postMessage(

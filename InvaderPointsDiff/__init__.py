@@ -104,7 +104,7 @@ def plop() -> None:
     logger.info('call top 50')
     current_top50 = get_list_top_50()
 
-    client = WebClient(token='xoxb-2022149276819-2076445414294-trFvA1fA4sWRPjOAbwA0AHp7')
+    client = WebClient(token=os.getenv('SLACK_TOKEN'))
 
     try:
         current_path = __read_file('CURRENT.txt')
@@ -115,7 +115,7 @@ def plop() -> None:
         if len(diff) > 0:
             last_flashes = get_last_flashes()
 
-            url = f"https://api.telegram.org/bot831369672:AAERDq4zQ0yaBjyMp-wtHdo8p3hsgikFCNg/sendMessage"
+            url = f"https://api.telegram.org/{os.getenv('TELEGRAM_API')}/sendMessage"
             for line in diff:
                 # Tests
                 _ = requests.get(url, params={'chat_id': -427728024, 'text': line.get('msg')}, timeout=10)

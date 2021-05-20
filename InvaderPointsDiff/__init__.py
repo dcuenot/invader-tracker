@@ -121,6 +121,7 @@ def plop() -> None:
                 _ = requests.get(url, params={'chat_id': -427728024, 'text': line.get('msg')}, timeout=10)
                 # Official
                 #_ = requests.get(url, params={'chat_id': -477216106, 'text': line.get('msg')}, timeout=10)
+                client.chat_postMessage(channel='#general', text=line.get('msg'))
                 response = client.chat_postMessage(channel=line.get('player').slack_name, text=line.get('msg'))
 
                 potentials = filter_potential_flash(line.get('player'), last_flashes)

@@ -267,7 +267,7 @@ def __persist_file(path: str, content: str):
         f.close()
     else:
         service = BlobClient.from_connection_string(
-            'DefaultEndpointsProtocol=https;AccountName=flashinvaders;AccountKey=cKxGbc5erhNtMGPTgecoPP6Mee6WSgSR8JUoOIrkoG5ayt1ZTmI7pAcTmcxKgnGCMqU2CJaGHR3paKVZkPHXHQ==;EndpointSuffix=core.windows.net',
+            os.getenv('AzureWebJobsStorage'),
             container_name='history',
             blob_name=path
         )
@@ -285,7 +285,7 @@ def __read_file(path: str) -> str:
         return f.read()
     else:
         service = BlobClient.from_connection_string(
-            'DefaultEndpointsProtocol=https;AccountName=flashinvaders;AccountKey=cKxGbc5erhNtMGPTgecoPP6Mee6WSgSR8JUoOIrkoG5ayt1ZTmI7pAcTmcxKgnGCMqU2CJaGHR3paKVZkPHXHQ==;EndpointSuffix=core.windows.net',
+            os.getenv('AzureWebJobsStorage'),
             container_name='history',
             blob_name=path
         )

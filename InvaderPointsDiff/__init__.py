@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import os
 import uuid
 from json import JSONEncoder
 from pprint import pprint
@@ -9,6 +10,11 @@ from typing import List, Set, Dict
 import azure.functions as func
 import requests
 from azure.storage.blob import BlobClient
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class Player:
@@ -23,6 +29,10 @@ class Player:
     @property
     def name(self):
         return self.__name
+
+    @property
+    def slack_name(self):
+        return ''.join(e for e in self.__name.lower() if e.isalnum())
 
     @property
     def score(self):
@@ -84,39 +94,17 @@ def main(mytimer: func.TimerRequest) -> None:
         tzinfo=datetime.timezone.utc).isoformat()
 
     if mytimer.past_due:
-        logging.info('The timer is past due!')
+        logger.info('The timer is past due!')
 
-    logging.info('Python timer trigger function ran at %s', utc_timestamp)
+    logger.info('Python timer trigger function ran at %s', utc_timestamp)
     plop()
 
 
 def plop() -> None:
-    # current_top50 = get_list_top_50()
-
-    # # Get data from Website
-    # resp = requests.get('http://space-invaders.com/flashinvaders/flashes/')
-    # content = resp.json()
-    # # pprint(content.get('with_paris'))
-    # #
-    # # print(content.get('timestamp'))
-    # server_time = datetime.datetime.fromtimestamp(content.get('timestamp'))
-    # print(server_time.isoformat())
-    # path = server_time.strftime("%Y/%m/%Y-%m-%d %H:%M:%S")
-    # print(path)
-
-    # messages = []
-    # for flash in content['with_paris']:
-    #     flash['flashed_at'] = datetime.datetime.fromtimestamp(flash['timestamp']).isoformat()
-    #     if PROVIDER.select(flash):
-    #         logging.info('Flash: %s already stored (%s) at: %s', flash['text'], flash['img'], flash['timestamp'])
-    #     else:
-    #         flash['path'] = __define_path_from_image(flash)
-    #         logging.info(json.dumps(flash))
-    #
-    #         messages.append(Message(json.dumps(flash)))
-
-    print('call top 50')
+    logger.info('call top 50')
     current_top50 = get_list_top_50()
+
+    client = WebClient(token='xoxb-2022149276819-2076445414294-trFvA1fA4sWRPjOAbwA0AHp7')
 
     try:
         current_path = __read_file('CURRENT.txt')
@@ -124,53 +112,83 @@ def plop() -> None:
         old_players = json.loads(current_str, cls=PlayerDecoder)
         diff = compute_diff(current_top50, old_players)
 
-
-        last_flashes_str = __read_file(f'{current_path}.flashes')
-        last_flashes = json.loads(last_flashes_str)
-
-        print(current_path)
-        pprint(last_flashes[0])
-
-        print(diff)
-
         if len(diff) > 0:
+            last_flashes = get_last_flashes()
+
             url = f"https://api.telegram.org/bot831369672:AAERDq4zQ0yaBjyMp-wtHdo8p3hsgikFCNg/sendMessage"
             for line in diff:
                 # Tests
                 _ = requests.get(url, params={'chat_id': -427728024, 'text': line.get('msg')}, timeout=10)
                 # Official
                 #_ = requests.get(url, params={'chat_id': -477216106, 'text': line.get('msg')}, timeout=10)
+                response = client.chat_postMessage(channel=line.get('player').slack_name, text=line.get('msg'))
 
-            persist_top_50_and_last_flashes(current_top50)
+                potentials = filter_potential_flash(line.get('player'), last_flashes)
+                for potential in potentials:
+                    attachments = [{
+                        "title": potential.get('player'),
+                        "image_url": 'http://space-invaders.com' + potential.get('img')
+                    }]
+                    client.chat_postMessage(
+                        channel=line.get('player').slack_name,
+                        thread_ts=response.get('ts'),
+                        text=potential.get('player'),
+                        attachments=attachments
+                    )
+
+            persist_top_50_and_last_flashes(current_top50, last_flashes)
 
     except Exception as exception:
         # first call in new blob storage
-        logging.error(exception)
-        persist_top_50_and_last_flashes(current_top50)
+        logger.error(exception)
+        last_flashes = get_last_flashes()
+        persist_top_50_and_last_flashes(current_top50, last_flashes)
+        for player in current_top50:
+            logger.info(player.name.lower())
+            create_slack_channel(client, player)
+
+
+def filter_potential_flash(player: Player, last_flashes):
+    res = []
+    server_time = datetime.datetime.fromtimestamp(last_flashes.get('timestamp'))
+    for flash in last_flashes.get('with_paris'):
+        flash_time = datetime.datetime.fromtimestamp(flash.get('timestamp'))
+        if (server_time - flash_time).total_seconds() < 660:
+            if flash.get('player') == 'ANONYMOUS' or flash.get('player') == player.name:
+                res.append(flash)
+
+    return res
+
+
+def create_slack_channel(client, player):
+    try:
+        client.conversations_create(name=player.slack_name)
+    except SlackApiError as e:
+        if e.response['error'] != 'name_taken':
+            raise e
 
 
 def object_hook(dct):
     return Player.of(dct)
 
 
-def persist_top_50_and_last_flashes(current_top50):
-    content, path = info_from_flashes_api()
-    print('persist file current_top50')
+def persist_top_50_and_last_flashes(current_top50, last_flashes):
+    path = compute_path_from_timestamp(last_flashes.get('timestamp'))
     __persist_file(f'{path}.json', json.dumps(current_top50, cls=PlayerEncoder))
-    print('persist file CURRENT.txt')
     __persist_file('CURRENT.txt', f'{path}')
-    print('persist file flashes')
-    __persist_file(f'{path}.flashes', json.dumps(content.get('with_paris')))
+    __persist_file(f'{path}.flashes', json.dumps(last_flashes.get('with_paris')))
 
 
-def info_from_flashes_api():
-    print('get flashes')
-    resp = requests.get('http://space-invaders.com/flashinvaders/flashes/')
-    content = resp.json()
-    print('extract timestamp')
-    server_time = datetime.datetime.fromtimestamp(content.get('timestamp'))
+def get_last_flashes():
+    resp = __api_call(f'http://space-invaders.com/flashinvaders/flashes/', 'last_flash.json')
+    return json.loads(resp)
+
+
+def compute_path_from_timestamp(timestamp):
+    logger.debug('extract timestamp')
+    server_time = datetime.datetime.fromtimestamp(timestamp)
     path = server_time.strftime("%Y/%m/%Y-%m-%d %H:%M:%S")
-    return content, path
+    return path
 
 
 def compute_diff(new, old):
@@ -199,7 +217,7 @@ def lookup_player(new_players: Set[Player], name, rank):
         if p.name == name:
             return p
     for p in new_players:
-        if p.rank == rank:
+        if p.rank == rank and rank != 50:
             return p
 
     return None
@@ -207,47 +225,80 @@ def lookup_player(new_players: Set[Player], name, rank):
 
 def get_list_top_50() -> List[Player]:
     uid = str(uuid.uuid4())
-    resp = requests.get(f'http://space-invaders.com/api/highscore/?uid={uid}')
-
-    if resp.status_code != 200:
-        raise ConnectionError
+    resp = __api_call(f'http://space-invaders.com/api/highscore/?uid={uid}', 'highscore.json')
 
     res = []
-    for row in resp.json().get('Players'):
+    for row in json.loads(resp).get('Players'):
         if row.get('rank') < 51:
             res.append(Player.of(row))
 
     return res
 
 
-def __persist_file(path: str, content: str):
-    service = BlobClient.from_connection_string(
-        'DefaultEndpointsProtocol=https;AccountName=flashinvaders;AccountKey=cKxGbc5erhNtMGPTgecoPP6Mee6WSgSR8JUoOIrkoG5ayt1ZTmI7pAcTmcxKgnGCMqU2CJaGHR3paKVZkPHXHQ==;EndpointSuffix=core.windows.net',
-        container_name='history',
-        blob_name=path
-    )
+def __api_call(url: str, local_file_name: str) -> str:
+    logger.info('API call: %s', url)
+    resp = None
+    if os.environ.get('env', '') == 'local':
+        try:
+            resp = __read_file(local_file_name)
+        except FileNotFoundError as exception:
+            logger.error(exception)
 
-    try:
-        service.upload_blob(content, overwrite=True)
-    except Exception as exception:
-        logging.error(exception)
+    if resp is None:
+        r = requests.get(url)
+
+        if r.status_code != 200:
+            raise ConnectionError
+
+        resp = r.text
+        __persist_file(local_file_name, resp)
+
+    return resp
+
+
+def __persist_file(path: str, content: str):
+    logger.info('persist file: %s', path)
+    if os.environ.get('env', '') == 'local':
+        path = 'files/' + path
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        f = open(path, "w")
+        f.write(content)
+        f.close()
+    else:
+        service = BlobClient.from_connection_string(
+            'DefaultEndpointsProtocol=https;AccountName=flashinvaders;AccountKey=cKxGbc5erhNtMGPTgecoPP6Mee6WSgSR8JUoOIrkoG5ayt1ZTmI7pAcTmcxKgnGCMqU2CJaGHR3paKVZkPHXHQ==;EndpointSuffix=core.windows.net',
+            container_name='history',
+            blob_name=path
+        )
+
+        try:
+            service.upload_blob(content, overwrite=True)
+        except Exception as exception:
+            logger.error(exception)
 
 
 def __read_file(path: str) -> str:
-    service = BlobClient.from_connection_string(
-        'DefaultEndpointsProtocol=https;AccountName=flashinvaders;AccountKey=cKxGbc5erhNtMGPTgecoPP6Mee6WSgSR8JUoOIrkoG5ayt1ZTmI7pAcTmcxKgnGCMqU2CJaGHR3paKVZkPHXHQ==;EndpointSuffix=core.windows.net',
-        container_name='history',
-        blob_name=path
-    )
+    logger.info('read file: %s', path)
+    if os.environ.get('env', '') == 'local':
+        f = open('files/' + path, "r")
+        return f.read()
+    else:
+        service = BlobClient.from_connection_string(
+            'DefaultEndpointsProtocol=https;AccountName=flashinvaders;AccountKey=cKxGbc5erhNtMGPTgecoPP6Mee6WSgSR8JUoOIrkoG5ayt1ZTmI7pAcTmcxKgnGCMqU2CJaGHR3paKVZkPHXHQ==;EndpointSuffix=core.windows.net',
+            container_name='history',
+            blob_name=path
+        )
 
-    try:
-        return service.download_blob().readall().decode("utf-8")
-    except Exception as exception:
-        logging.error(exception)
+        try:
+            return service.download_blob().readall().decode("utf-8")
+        except Exception as exception:
+            logger.error(exception)
 
 
 if __name__ == "__main__":
     print()
-    print('START')
+    logger.info('==> START')
 
     plop()
+
+    logger.info('==> END')

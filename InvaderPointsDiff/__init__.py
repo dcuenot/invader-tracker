@@ -133,7 +133,7 @@ def plop() -> None:
                     client.chat_postMessage(
                         channel=line.get('player').slack_name,
                         thread_ts=response.get('ts'),
-                        text=f"{potential.get('player')} - <http://space-invaders.com' + potential.get('img')|lien>",
+                        text=f"{potential.get('player')} - <http://space-invaders.com + potential.get('img')|lien>",
                         attachments=attachments
                     )
 
@@ -162,7 +162,7 @@ def filter_potential_flash(player: Player, last_flashes):
                 res_flasher.append(flash)
             elif flash.get('player') == 'ANONYMOUS' and flash.get('city') == 'Paris':
                 res_anonymous_paris.append(flash)
-            else:
+            elif flash.get('player') == 'ANONYMOUS':
                 res_anonymous_other.append(flash)
 
     return res_flasher + res_anonymous_other + res_anonymous_paris

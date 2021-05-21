@@ -133,7 +133,7 @@ def plop() -> None:
                     client.chat_postMessage(
                         channel=line.get('player').slack_name,
                         thread_ts=response.get('ts'),
-                        text=f"{potential.get('player')} - <http://space-invaders.com + potential.get('img')|lien>",
+                        text=f"{potential.get('player')} - <http://space-invaders.com + {potential.get('img')}|lien>",
                         attachments=attachments
                     )
 

@@ -150,15 +150,22 @@ def plop() -> None:
 
 
 def filter_potential_flash(player: Player, last_flashes):
-    res = []
+    res_flasher = []
+    res_anonymous_paris = []
+    res_anonymous_other = []
+
     server_time = datetime.datetime.fromtimestamp(last_flashes.get('timestamp'))
     for flash in last_flashes.get('with_paris'):
         flash_time = datetime.datetime.fromtimestamp(flash.get('timestamp'))
         if (server_time - flash_time).total_seconds() < 660:
-            if flash.get('player') == 'ANONYMOUS' or flash.get('player') == player.name:
-                res.append(flash)
+            if flash.get('player') == player.name:
+                res_flasher.append(flash)
+            elif flash.get('player') == 'ANONYMOUS' and flash.get('city') == 'Paris':
+                res_anonymous_paris.append(flash)
+            else:
+                res_anonymous_other.append(flash)
 
-    return res
+    return res_flasher + res_anonymous_other + res_anonymous_paris
 
 
 def create_slack_channel(client, player):

@@ -127,15 +127,10 @@ def plop() -> None:
                 potentials = filter_potential_flash(line.get('player'), last_flashes)
                 for potential in potentials:
                     create_slack_channel(client, line.get('player'))
-                    attachments = [{
-                        "title": potential.get('city'),
-                        "image_url": 'http://space-invaders.com' + potential.get('img')
-                    }]
                     client.chat_postMessage(
                         channel=line.get('player').slack_name,
                         thread_ts=response.get('ts'),
-                        text=f"{potential.get('player')} - <http://space-invaders.com{potential.get('img')}|lien>",
-                        attachments=attachments
+                        text=f"{potential.get('player')} - {potential.get('city')} - <http://space-invaders.com{potential.get('img')}|lien>",
                     )
 
             persist_top_50_and_last_flashes(current_top50, last_flashes)

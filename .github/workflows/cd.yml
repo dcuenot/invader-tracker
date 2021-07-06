@@ -35,7 +35,8 @@ jobs:
         pip install -r requirements.txt --target=".python_packages/lib/site-packages"
         popd
     - name: 'Run Azure Functions Action'
-      uses: Azure/functions-action@v1
+      # specific version defined due to this issue: https://github.com/Azure/functions-action/issues/86
+      uses: Azure/functions-action@v1.3.2
       id: fa
       with:
         app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}

@@ -9,6 +9,8 @@ from typing import List, Set, Dict
 
 import azure.functions as func
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from azure.storage.blob import BlobClient
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -249,7 +251,19 @@ def __api_call(url: str, local_file_name: str) -> str:
             logger.error(exception)
 
     if resp is None:
-        r = requests.get(url)
+        session = requests.Session()
+        retry = Retry(
+            total=5,
+            read=5,
+            connect=5,
+            backoff_factor=1,
+            status_forcelist=[500, 502, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+
+        r = session.get(url)
 
         if r.status_code != 200:
             raise ConnectionError

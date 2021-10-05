@@ -230,8 +230,7 @@ def lookup_player(new_players: Set[Player], name, rank):
 
 
 def get_list_top_50() -> List[Player]:
-    uid = str(uuid.uuid4())
-    resp = __api_call(f'http://space-invaders.com/api/highscore/?uid={uid}', 'highscore.json')
+    resp = __api_call(f'http://space-invaders.com/api/highscore/?uid=', 'highscore.json', True)
 
     res = []
     for row in json.loads(resp).get('Players'):
@@ -241,7 +240,7 @@ def get_list_top_50() -> List[Player]:
     return res
 
 
-def __api_call(url: str, local_file_name: str) -> str:
+def __api_call(url: str, local_file_name: str, with_uuid = False) -> str:
     logger.info('API call: %s', url)
     resp = None
     if os.environ.get('env', '') == 'local':
@@ -262,6 +261,10 @@ def __api_call(url: str, local_file_name: str) -> str:
         adapter = HTTPAdapter(max_retries=retry)
         session.mount('http://', adapter)
         session.mount('https://', adapter)
+
+        # Regenerate uuid at every attempts
+        if with_uuid:
+            url = url + str(uuid.uuid4())
 
         r = session.get(url)
 

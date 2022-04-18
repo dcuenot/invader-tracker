@@ -34,4 +34,4 @@ jobs:
 
     - name: Run script
       run: |
-        pipenv run python -m InvaderPointsDiff
+        pipenv run InvaderPointsDiff
